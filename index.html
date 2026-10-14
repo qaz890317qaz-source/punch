@@ -15,6 +15,7 @@
     .btn-out { background-color: #007aff; }
     .input-box { width: 100%; padding: 12px; margin-bottom: 16px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
     #msg { margin-top: 16px; font-size: 14px; line-height: 1.5; font-weight: 500; min-height: 24px; }
+    .ip-tag { margin-top: 8px; font-size: 12px; color: #888; }
   </style>
 </head>
 <body>
@@ -24,15 +25,27 @@
     <button class="btn btn-in" onclick="punch('上班')">上班打卡</button>
     <button class="btn btn-out" onclick="punch('下班')">下班打卡</button>
     <div id="msg"></div>
+    <div id="curIp" class="ip-tag"></div>
   </div>
 
   <script>
     const GAS_URL = "https://script.google.com/macros/s/AKfycbxy8neRigW5k4FAy_UQpCKzzzqqv6Uu04ocPLW3qOy9tVzQ3EPIAXmDAvyq8IytWndt/exec";
     const LIFF_ID = "2012021341-xEKCNCCh";
     let lineProfile = null;
+    let currentClientIp = "";
 
     async function initLiff() {
       try {
+        // 先抓取 IP 並顯示在畫面上，方便確認公司 Wi-Fi IP
+        try {
+          const ipRes = await fetch("https://api.ipify.org?format=json");
+          const ipData = await ipRes.json();
+          currentClientIp = ipData.ip;
+          document.getElementById("curIp").innerText = `目前 IP: ${currentClientIp}`;
+        } catch(e) {
+          document.getElementById("curIp").innerText = "無法偵測 IP";
+        }
+
         await liff.init({ liffId: LIFF_ID });
         if (!liff.isLoggedIn()) {
           liff.login();
@@ -40,7 +53,11 @@
           lineProfile = await liff.getProfile();
           document.getElementById("welcome").innerText = `你好，${lineProfile.displayName}`;
           const savedName = localStorage.getItem("emp_name");
-          if (savedName) document.getElementById("empName").value = savedName;
+          if (savedName) {
+            document.getElementById("empName").value = savedName;
+          } else {
+            document.getElementById("empName").value = lineProfile.displayName;
+          }
         }
       } catch (err) {
         document.getElementById("welcome").innerText = "打卡系統";
@@ -56,33 +73,35 @@
       }
       localStorage.setItem("emp_name", empName);
       msgDiv.style.color = "#666";
-      msgDiv.innerText = "正在取得連線位置與打卡中...";
+      msgDiv.innerText = "正在傳送打卡資料...";
 
       try {
-        const ipRes = await fetch("https://api.ipify.org?format=json");
-        const ipData = await ipRes.json();
+        if (!currentClientIp) {
+          const ipRes = await fetch("https://api.ipify.org?format=json");
+          const ipData = await ipRes.json();
+          currentClientIp = ipData.ip;
+        }
 
-        const response = await fetch(GAS_URL, {
+        // 使用 no-cors 模式發送，徹底避開 Google 轉址 CORS 阻擋
+        await fetch(GAS_URL, {
           method: "POST",
+          mode: "no-cors",
+          headers: {
+            "Content-Type": "text/plain;charset=utf-8"
+          },
           body: JSON.stringify({
-            clientIp: ipData.ip,
+            clientIp: currentClientIp,
             userName: lineProfile ? lineProfile.displayName : "未知",
             employeeId: empName,
             punchType: type
           })
         });
 
-        const result = await response.json();
-        if (result.status === "success") {
-          msgDiv.style.color = "green";
-          msgDiv.innerText = result.message;
-        } else {
-          msgDiv.style.color = "red";
-          msgDiv.innerText = result.message;
-        }
+        msgDiv.style.color = "green";
+        msgDiv.innerText = `${type}請求已送出！請至試算表確認紀錄。`;
       } catch (e) {
         msgDiv.style.color = "red";
-        msgDiv.innerText = "打卡失敗，請檢查網路連線";
+        msgDiv.innerText = "打卡發送失敗，請確認網路！";
       }
     }
 
