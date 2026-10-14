@@ -3,19 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>員工打卡系統</title>
+  <title>員工 GPS 打卡系統</title>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 90vh; margin: 0; background: #f4f6f8; padding: 20px; box-sizing: border-box; }
     .card { background: white; padding: 28px 24px; border-radius: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.08); width: 100%; max-width: 340px; text-align: center; box-sizing: border-box; }
     h2 { margin-top: 0; color: #333; font-size: 20px; }
-    .btn { width: 100%; padding: 14px; margin: 8px 0; font-size: 17px; border: none; border-radius: 10px; cursor: pointer; color: white; font-weight: bold; transition: opacity 0.2s; }
+    .btn { width: 100%; padding: 14px; margin: 8px 0; font-size: 17px; border: none; border-radius: 10px; cursor: pointer; color: white; font-weight: bold; }
     .btn:active { opacity: 0.8; }
     .btn-in { background-color: #06C755; }
     .btn-out { background-color: #007aff; }
     .input-box { width: 100%; padding: 12px; margin-bottom: 16px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
     #msg { margin-top: 16px; font-size: 14px; line-height: 1.5; font-weight: 500; min-height: 24px; }
-    .ip-tag { margin-top: 8px; font-size: 12px; color: #888; }
+    .geo-info { margin-top: 10px; font-size: 12px; color: #666; }
   </style>
 </head>
 <body>
@@ -25,87 +25,93 @@
     <button class="btn btn-in" onclick="punch('上班')">上班打卡</button>
     <button class="btn btn-out" onclick="punch('下班')">下班打卡</button>
     <div id="msg"></div>
-    <div id="curIp" class="ip-tag"></div>
+    <div id="gpsText" class="geo-info">定位準備中...</div>
   </div>
 
   <script>
     const GAS_URL = "https://script.google.com/macros/s/AKfycbxy8neRigW5k4FAy_UQpCKzzzqqv6Uu04ocPLW3qOy9tVzQ3EPIAXmDAvyq8IytWndt/exec";
     const LIFF_ID = "2012021341-xEKCNCCh";
     let lineProfile = null;
-    let currentClientIp = "";
+    let currentCoords = null;
 
-    async function initLiff() {
-      try {
-        // 先抓取 IP 並顯示在畫面上，方便確認公司 Wi-Fi IP
-        try {
-          const ipRes = await fetch("https://api.ipify.org?format=json");
-          const ipData = await ipRes.json();
-          currentClientIp = ipData.ip;
-          document.getElementById("curIp").innerText = `目前 IP: ${currentClientIp}`;
-        } catch(e) {
-          document.getElementById("curIp").innerText = "無法偵測 IP";
+    // 取得手機 GPS 經緯度
+    function getLocation() {
+      return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+          reject("裝置不支援 GPS 定位");
+          return;
         }
+        navigator.geolocation.getCurrentPosition(
+          (pos) => resolve(pos.coords),
+          (err) => reject("請允許手機瀏覽器存取位置資訊"),
+          { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+        );
+      });
+    }
 
+    async function init() {
+      try {
         await liff.init({ liffId: LIFF_ID });
-        if (!liff.isLoggedIn()) {
-          liff.login();
-        } else {
+        if (liff.isLoggedIn()) {
           lineProfile = await liff.getProfile();
           document.getElementById("welcome").innerText = `你好，${lineProfile.displayName}`;
-          const savedName = localStorage.getItem("emp_name");
-          if (savedName) {
-            document.getElementById("empName").value = savedName;
-          } else {
-            document.getElementById("empName").value = lineProfile.displayName;
-          }
+          const saved = localStorage.getItem("emp_name");
+          document.getElementById("empName").value = saved || lineProfile.displayName;
         }
-      } catch (err) {
+      } catch(e) {
         document.getElementById("welcome").innerText = "打卡系統";
+      }
+
+      try {
+        currentCoords = await getLocation();
+        document.getElementById("gpsText").innerText = `GPS 定位成功 (${currentCoords.latitude.toFixed(4)}, ${currentCoords.longitude.toFixed(4)})`;
+      } catch (err) {
+        document.getElementById("gpsText").innerText = "點擊打卡時將要求定位權限";
       }
     }
 
     async function punch(type) {
-      const empName = document.getElementById("empName").value.trim();
-      const msgDiv = document.getElementById("msg");
-      if (!empName) {
-        alert("請先輸入姓名或工號！");
+      const name = document.getElementById("empName").value.trim();
+      const msg = document.getElementById("msg");
+      if (!name) {
+        alert("請輸入姓名或工號");
         return;
       }
-      localStorage.setItem("emp_name", empName);
-      msgDiv.style.color = "#666";
-      msgDiv.innerText = "正在傳送打卡資料...";
+      localStorage.setItem("emp_name", name);
+      msg.style.color = "#555";
+      msg.innerText = "正在取得精確 GPS 位置...";
 
       try {
-        if (!currentClientIp) {
-          const ipRes = await fetch("https://api.ipify.org?format=json");
-          const ipData = await ipRes.json();
-          currentClientIp = ipData.ip;
-        }
+        currentCoords = await getLocation();
+      } catch (err) {
+        msg.style.color = "red";
+        msg.innerText = err;
+        return;
+      }
 
-        // 使用 no-cors 模式發送，徹底避開 Google 轉址 CORS 阻擋
-        await fetch(GAS_URL, {
-          method: "POST",
-          mode: "no-cors",
-          headers: {
-            "Content-Type": "text/plain;charset=utf-8"
-          },
-          body: JSON.stringify({
-            clientIp: currentClientIp,
-            userName: lineProfile ? lineProfile.displayName : "未知",
-            employeeId: empName,
-            punchType: type
-          })
-        });
+      msg.innerText = "資料傳送中...";
 
-        msgDiv.style.color = "green";
-        msgDiv.innerText = `${type}請求已送出！請至試算表確認紀錄。`;
-      } catch (e) {
-        msgDiv.style.color = "red";
-        msgDiv.innerText = "打卡發送失敗，請確認網路！";
+      const sendUrl = GAS_URL + 
+        "?lat=" + encodeURIComponent(currentCoords.latitude) +
+        "&lng=" + encodeURIComponent(currentCoords.longitude) +
+        "&userName=" + encodeURIComponent(lineProfile ? lineProfile.displayName : "未知") +
+        "&employeeId=" + encodeURIComponent(name) +
+        "&punchType=" + encodeURIComponent(type);
+
+      try {
+        const script = document.createElement("script");
+        script.src = sendUrl;
+        document.body.appendChild(script);
+
+        msg.style.color = "green";
+        msg.innerText = `${type}打卡資料已送出！`;
+      } catch (err) {
+        msg.style.color = "red";
+        msg.innerText = "送出失敗，請確認網路！";
       }
     }
 
-    initLiff();
+    init();
   </script>
 </body>
 </html>
