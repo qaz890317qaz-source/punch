@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>員工打卡系統</title>
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 90vh; margin: 0; background: #f4f6f8; padding: 20px; box-sizing: border-box; }
+    .card { background: white; padding: 28px 24px; border-radius: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.08); width: 100%; max-width: 340px; text-align: center; box-sizing: border-box; }
+    h2 { margin-top: 0; color: #333; font-size: 20px; }
+    .btn { width: 100%; padding: 14px; margin: 8px 0; font-size: 17px; border: none; border-radius: 10px; cursor: pointer; color: white; font-weight: bold; transition: opacity 0.2s; }
+    .btn:active { opacity: 0.8; }
+    .btn-in { background-color: #06C755; }
+    .btn-out { background-color: #007aff; }
+    .input-box { width: 100%; padding: 12px; margin-bottom: 16px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
+    #msg { margin-top: 16px; font-size: 14px; line-height: 1.5; font-weight: 500; min-height: 24px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2 id="welcome">載入中...</h2>
+    <input type="text" id="empName" class="input-box" placeholder="請輸入姓名或工號">
+    <button class="btn btn-in" onclick="punch('上班')">上班打卡</button>
+    <button class="btn btn-out" onclick="punch('下班')">下班打卡</button>
+    <div id="msg"></div>
+  </div>
+
+  <script>
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbxy8neRigW5k4FAy_UQpCKzzzqqv6Uu04ocPLW3qOy9tVzQ3EPIAXmDAvyq8IytWndt/exec";
+    const LIFF_ID = "2012021341-xEKCNCCh";
+    let lineProfile = null;
+
+    async function initLiff() {
+      try {
+        await liff.init({ liffId: LIFF_ID });
+        if (!liff.isLoggedIn()) {
+          liff.login();
+        } else {
+          lineProfile = await liff.getProfile();
+          document.getElementById("welcome").innerText = `你好，${lineProfile.displayName}`;
+          const savedName = localStorage.getItem("emp_name");
+          if (savedName) document.getElementById("empName").value = savedName;
+        }
+      } catch (err) {
+        document.getElementById("welcome").innerText = "打卡系統";
+      }
+    }
+
+    async function punch(type) {
+      const empName = document.getElementById("empName").value.trim();
+      const msgDiv = document.getElementById("msg");
+      if (!empName) {
+        alert("請先輸入姓名或工號！");
+        return;
+      }
+      localStorage.setItem("emp_name", empName);
+      msgDiv.style.color = "#666";
+      msgDiv.innerText = "正在取得連線位置與打卡中...";
+
+      try {
+        const ipRes = await fetch("https://api.ipify.org?format=json");
+        const ipData = await ipRes.json();
+
+        const response = await fetch(GAS_URL, {
+          method: "POST",
+          body: JSON.stringify({
+            clientIp: ipData.ip,
+            userName: lineProfile ? lineProfile.displayName : "未知",
+            employeeId: empName,
+            punchType: type
+          })
+        });
+
+        const result = await response.json();
+        if (result.status === "success") {
+          msgDiv.style.color = "green";
+          msgDiv.innerText = result.message;
+        } else {
+          msgDiv.style.color = "red";
+          msgDiv.innerText = result.message;
+        }
+      } catch (e) {
+        msgDiv.style.color = "red";
+        msgDiv.innerText = "打卡失敗，請檢查網路連線";
+      }
+    }
+
+    initLiff();
+  </script>
+</body>
+</html>
