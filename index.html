@@ -34,7 +34,6 @@
     let lineProfile = null;
     let currentCoords = null;
 
-    // 取得手機 GPS 經緯度
     function getLocation() {
       return new Promise((resolve, reject) => {
         if (!navigator.geolocation) {
@@ -43,8 +42,8 @@
         }
         navigator.geolocation.getCurrentPosition(
           (pos) => resolve(pos.coords),
-          (err) => reject("請允許手機瀏覽器存取位置資訊"),
-          { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+          (err) => reject("請允許手機存取位置資訊"),
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
       });
     }
@@ -66,7 +65,7 @@
         currentCoords = await getLocation();
         document.getElementById("gpsText").innerText = `GPS 定位成功 (${currentCoords.latitude.toFixed(4)}, ${currentCoords.longitude.toFixed(4)})`;
       } catch (err) {
-        document.getElementById("gpsText").innerText = "點擊打卡時將要求定位權限";
+        document.getElementById("gpsText").innerText = "點擊打卡時將獲取定位";
       }
     }
 
@@ -79,7 +78,7 @@
       }
       localStorage.setItem("emp_name", name);
       msg.style.color = "#555";
-      msg.innerText = "正在取得精確 GPS 位置...";
+      msg.innerText = "取得定位並記錄中...";
 
       try {
         currentCoords = await getLocation();
@@ -89,25 +88,27 @@
         return;
       }
 
-      msg.innerText = "資料傳送中...";
-
-      const sendUrl = GAS_URL + 
-        "?lat=" + encodeURIComponent(currentCoords.latitude) +
-        "&lng=" + encodeURIComponent(currentCoords.longitude) +
-        "&userName=" + encodeURIComponent(lineProfile ? lineProfile.displayName : "未知") +
-        "&employeeId=" + encodeURIComponent(name) +
-        "&punchType=" + encodeURIComponent(type);
+      const postData = {
+        lat: currentCoords.latitude,
+        lng: currentCoords.longitude,
+        userName: lineProfile ? lineProfile.displayName : "未知",
+        employeeId: name,
+        punchType: type
+      };
 
       try {
-        const script = document.createElement("script");
-        script.src = sendUrl;
-        document.body.appendChild(script);
+        await fetch(GAS_URL, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify(postData)
+        });
 
         msg.style.color = "green";
-        msg.innerText = `${type}打卡資料已送出！`;
+        msg.innerText = `${type}打卡成功！已寫入紀錄。`;
       } catch (err) {
         msg.style.color = "red";
-        msg.innerText = "送出失敗，請確認網路！";
+        msg.innerText = "傳送失敗，請確認網路！";
       }
     }
 
