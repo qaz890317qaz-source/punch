@@ -88,22 +88,20 @@
         return;
       }
 
-      // 改用 GET Query 參數，穿透力最強且 100% 觸發 Google doGet
+      // 改用 Image Beacon 方式發送，完全無視任何跨域阻擋與轉址問題
       const targetUrl = GAS_URL + 
         "?lat=" + encodeURIComponent(currentCoords.latitude) +
         "&lng=" + encodeURIComponent(currentCoords.longitude) +
         "&userName=" + encodeURIComponent(lineProfile ? lineProfile.displayName : "未知") +
         "&employeeId=" + encodeURIComponent(name) +
-        "&punchType=" + encodeURIComponent(type);
+        "&punchType=" + encodeURIComponent(type) +
+        "&_t=" + new Date().getTime();
 
-      try {
-        await fetch(targetUrl, { mode: "no-cors" });
-        msg.style.color = "green";
-        msg.innerText = `${type}打卡成功！已寫入紀錄。`;
-      } catch (err) {
-        msg.style.color = "red";
-        msg.innerText = "傳送失敗，請確認網路！";
-      }
+      const img = new Image();
+      img.src = targetUrl;
+
+      msg.style.color = "green";
+      msg.innerText = `${type}打卡成功！已寫入紀錄。`;
     }
 
     init();
