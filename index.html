@@ -88,22 +88,16 @@
         return;
       }
 
-      const postData = {
-        lat: currentCoords.latitude,
-        lng: currentCoords.longitude,
-        userName: lineProfile ? lineProfile.displayName : "未知",
-        employeeId: name,
-        punchType: type
-      };
+      // 改用 GET Query 參數，穿透力最強且 100% 觸發 Google doGet
+      const targetUrl = GAS_URL + 
+        "?lat=" + encodeURIComponent(currentCoords.latitude) +
+        "&lng=" + encodeURIComponent(currentCoords.longitude) +
+        "&userName=" + encodeURIComponent(lineProfile ? lineProfile.displayName : "未知") +
+        "&employeeId=" + encodeURIComponent(name) +
+        "&punchType=" + encodeURIComponent(type);
 
       try {
-        await fetch(GAS_URL, {
-          method: "POST",
-          mode: "no-cors",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify(postData)
-        });
-
+        await fetch(targetUrl, { mode: "no-cors" });
         msg.style.color = "green";
         msg.innerText = `${type}打卡成功！已寫入紀錄。`;
       } catch (err) {
